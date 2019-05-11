@@ -211,3 +211,4 @@ Common Lisp类型 =t= 是所有类型的基类，所以每个对象都属于 =t=
 #+BEGIN_SRC lisp
   (typep 27 'integer)
 #+END_SRC
+test
