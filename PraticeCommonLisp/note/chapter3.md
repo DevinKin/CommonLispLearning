@@ -1,0 +1,22 @@
+- [简单的数据库](#sec-1)
+
+# 简单的数据库<a id="sec-1"></a>
+
+```common-lisp
+(defun make-cd (title artist rating ripped)
+  (list :title title :artist artist :rating rating :ripped ripped))
+```
+
+`*query-io*` 是一个含有关联到当前终端的输入流的全局变量。
+
+`with-standard-io-syntax` 宏确保Lisp读取器和打印器的操作彼此兼容。
+
+`remove-if-not` 接受一个谓词和原始列表，然后返回一个仅包含原始列表中匹配该谓词的所有元素的新的列表。
+
+`labmda` 是一个表明你正在定义匿名函数的指示器。
+
+关键字形参 `&key` 将简单的名称替换成一个包括
+
+-   形参名
+-   默认值
+-   `supplied-p` 形参的列表， `supplied-p` 形参可以将设置为真或假，具体取决于实参在特定的函数调用里是否真的被传入相应的关键字形参中。
