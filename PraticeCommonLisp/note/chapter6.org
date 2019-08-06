@@ -1,0 +1,210 @@
+* 第6章-变量
+  Common Lisp支持两种类型的变量
+  - 词法(lexical)变量
+  - 动态(dynamic)变量
+ 
+** 变量的基础知识
+   Common Lisp可以不需要为每个变量生命其可以保存对象的类型，一个变量可以保存任何类型的值，这些值带有可用于运行期类型检查的类型信息。
+
+   Common Lisp是动态类型的，类型错误会被动态检测到。
+
+   Common Lisp是强类型语言，因为所有的类型错误都被检测到，无法将一个对象作为其不属于的类型实例来对待。
+
+   Common Lisp中所有的值都是对象的引用。将一个变量赋予新值就会改变该变量所指向的对象，而对之前被引用的对象没有影响。
+
+   ~LET~ 操作符引入新的变量
+   #+begin_src common-lisp
+     (let (variable*)
+       body-form*)
+   #+end_src
+
+   函数形参和 ~LET~ 变量的作用域（变量名可用来引用该绑定的程序区域）被限定在引入该变量的形式之内，该形式即函数定义或 ~LET~ ，被称为形式绑定。
+
+   如果嵌套了引入同名变量的绑定形式，那么最内层的变量绑定将覆盖外层的绑定。
+   #+begin_src common-lisp
+     (defun foo (x)
+       (format t "Parameter: ~a~%" x)
+       (let ((x 2))
+         (format t "Outer LET: ~a~%" x)
+         (let ((x 3))
+           (format t "Inner LET: ~a~%" x))
+         (format t "Outer LET: ~a~%" x))
+       (format t "Parameter: ~a~%" x))
+
+     ;(foo 7)
+     ;Parameter: 7
+     ;Outer LET: 2
+     ;Inner LET: 3
+     ;Outer LET: 2
+     ;Parameter: 7
+   #+end_src
+
+   ~LET*~ 中每个变量的初始值形式，都可以引用到那些在变量列表中早先引入的变量。
+   #+begin_src common-lisp
+     (let* ((x 10)
+            (y (+ x 10)))
+       (list x y))
+   #+end_src
+
+
+** 词法变量和闭包
+   默认情况下，Common Lisp中所有的绑定形式都将引入词法作用域变量。
+
+   词法作用域变量只能由那些在文本上位于绑定形式内的代码所引用。
+
+   Common Lisp词法作用域和嵌套函数一起使用时，按照词法作用域的规则，只有文本上位于绑定形式之内的代码可以指向一个词法变量。
+
+   根据词法作用域规则， ~LAMBDA~ 形式中对 ~count~ 的引用应该是合法的，而这个含有引用的匿名函数将被作为 ~LET~ 形式的值返回，并可能通过 ~FUNCALL~ 被不在 ~LET~ 作用于之内的代码所调用。这个匿名函数称为闭包，它封闭包装了由 ~LET~ 创建的绑定。
+   #+begin_src common-lisp
+     (let ((count 0))
+       #'(lambda () (setf count (1+ count))))
+   #+end_src
+   
+   闭包捕捉的是绑定而不是变量的值，一个闭包不仅可以访问到它所闭合的变量的值，还可以对其赋予在闭包被调用时不断变化的新值。
+   #+begin_src common-lisp
+     (defparameter *fn* (let ((count 0))
+                          #'(lambda () (setf count (1+ count)))))
+
+
+     ;(funcall *fn*)
+     ;1
+     ;(funcall *fn*)
+     ;2
+   #+end_src
+
+   单一闭包可以简单通过引用变量来闭合许多变量绑定，或者是多个闭合可以捕捉相同的绑定。
+   #+begin_src common-lisp
+     (let ((count 0))
+       (list
+        #'(lambda () (incf count))
+        #'(lambda () (decf count))
+        #'(lambda () count)
+        ))
+   #+end_src
+
+** 动态变量
+   Common Lisp提供了两种创建全局变量的方式
+   - ~DEFVAR~
+   - ~DEFPARAMETER~
+   
+   ~DEFVAR~ 和 ~DEFPARAMETER~ 两种形式都接受一个变量名，一个初始值以及一个可选的文档字符串。全局变量习惯以 ~*~ 开头和结尾来定义。
+   #+begin_src common-lisp
+     (defvar *count* 0
+       "Count of widgets made so far.")
+
+     (defparameter *gap-tolerance* 0.001
+       "Tolerance to be allowed in widget gaps.")
+   #+end_src
+
+   ~DEFPARAMETER~ 总是将初始值赋给命名的变量。
+
+   ~DEFVAR~ 只有当变量未定义时才这样做。但是可以不带初始值来使用，从而在不给定其值的情况下定义一个全局变量，这样的变量称为未绑定的。
+
+   ~DEFVAR~ 定义的变量所含的数据应该是持久存在的，即使用到该变量的源码发生改变时也应该如此。
+
+   动态绑定可以被任何在绑定形式执行期间所调用的代码所引用，显然所有的全局变量事实上都是动态变量。
+
+   如果想要临时重新定义 ~*standarad-output*~ ，只需重新绑定它即可，比如可以使用 ~LET~ 。
+   
+   一个给动态变量的每个新绑定都将被推到一个用于该变量的绑定栈中，而对该变量的引用总是使用最近的绑定。当绑定形式返回时，它们所创建的绑定都会被从栈上弹出，从而暴露出前一个绑定。
+   #+begin_src common-lisp
+     (defvar *x* 10)
+     (defun foo ()
+       (format t "X: ~d~%" *x*))
+
+     (let ((*x* 20))
+       (foo))
+
+     (defun bar ()
+       (foo)
+       (let ((*x* 20))
+         (foo))
+       (foo))
+
+     ;(bar)
+     ;X: 10
+     ;X: 20
+     ;X: 10
+     ;NIL
+   #+end_src
+
+   和词法绑定一样，赋予新值金辉影响当前绑定。
+   #+begin_src common-lisp
+     (defun foo ()
+       (format t "Before assignment ~18tX: ~d~%" *x*)
+       (setf *x* (+ 1 *x*))
+       (format t "After assignment ~18tX: ~d~%" *x*))
+
+     ;(foo)
+     ;Before assignment  X: 10
+     ;After assignment  X: 11
+     ;NIL
+
+
+     ;(bar)
+     ;Before assignment  X: 11
+     ;After assignment  X: 12
+     ;Before assignment  X: 20
+     ;After assignment  X: 21
+     ;Before assignment  X: 12
+     ;After assignment  X: 13
+     ;NIL
+   #+end_src
+
+   每一个由 ~DEFVAR~ 和 ~DEFPARAMETER~ 所定义的变量其名字都将被自动声明为全局特殊的。在绑定形式中使用这样一个名字，被创建的绑定将成为一个动态绑定。
+
+   动态绑定使全局变量更易于管理，重要的是将允许超距作用的存在。绑定一个全局变量具有两种超距效果。
+   - 它可以改变下游代码的行为。
+   - 它使得下游代码可以为栈的上一级所建立的绑定赋予一个新的值。
+  
+
+** 常量
+   所有的常量都是全局的，并且使用 ~DEFCONSTANT~ 来定义。
+   #+begin_src common-lisp
+     (defconstant name initial-value-form [documentation-string])
+   #+end_src
+
+   常量不能被用作a函数形参或是用任何其他的绑定形式来进行重绑定。
+
+   通常以 ~+~ 开始和结尾来表示常量。
+
+
+** 赋值
+   绑定赋予新值需要使用 ~SETF~ 宏。
+   #+begin_src common-lisp
+     (setf place value)
+   #+end_src
+
+   ~SETF~ 宏它可以检查所赋值的 ~place~ 上的形式，并展开成适当的底层操作来修改那个位置。当该位置是变量时，它展开成一个对特殊操作符 ~SETQ~ 的调用，后者可以访问到词法和动态绑定。
+   #+begin_src common-lisp
+     (setf x 10)
+   #+end_src
+
+   ~SETF~ 可以赋多个值
+   #+begin_src common-lisp
+     (setf x 1 y 2)
+   #+end_src
+
+
+** 其他修改位置的方式
+   ~INCF~ 和 ~DECF~ 是修改宏，修改宏建立在 ~SETF~ 之上。
+
+   ~ROTATEFF~ 宏在位置之间轮换他们的值。
+   #+begin_src common-lisp
+     (rotatef a b)
+
+     ;;等价于
+     (let ((tmp a))
+       (setf a b b tmp) nil)
+   #+end_src
+
+   ~SHIFTF~ 宏将值向左侧移动而不是轮换他们，最后一个参数提供的值移动到倒数第二个参数上，其他的值将向左移动一个，第一个参数的初始值被简单的返回。
+   #+begin_src common-lisp
+     (shiftf a b 10)
+
+     ;; 等价于
+     (let ((tmp a))
+       (setf a b b 10) tmp)
+   #+end_src
+
+   ~rotatef~ 和 ~SHIFTF~ 都可以被用于任意多个参数，并且和所有的修改宏一样，保证以从左到右的顺序对每个参数仅求值一次。
