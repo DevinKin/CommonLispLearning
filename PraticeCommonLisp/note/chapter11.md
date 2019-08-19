@@ -1,0 +1,423 @@
+- [第11章-集合](#sec-1)
+  - [向量](#sec-1-1)
+  - [向量的子类型](#sec-1-2)
+  - [作为序列的向量](#sec-1-3)
+  - [序列迭代函数](#sec-1-4)
+  - [高阶函数变体](#sec-1-5)
+  - [整个序列上的操作](#sec-1-6)
+  - [排序与合并](#sec-1-7)
+  - [子序列操作](#sec-1-8)
+  - [序列谓词](#sec-1-9)
+  - [序列映射函数](#sec-1-10)
+  - [哈希表](#sec-1-11)
+  - [哈希表迭代](#sec-1-12)
+
+# 第11章-集合<a id="sec-1"></a>
+
+## 向量<a id="sec-1-1"></a>
+
+向量是Common Lisp基本的整数索引集合，他们分为两大类
+
+-   定长向量(类似数组)
+-   变长向量(类似链表)
+
+可以使用函数 `VECTOR` 来生成含有特定值的定长向量，它接受任意数量参数并返回一个新分配的含有那些参数的定长向量。
+
+```common-lisp
+(vector) ;#()
+(vector 1)  ;#(1)
+(vector 1 2) ;#(1 2)
+```
+
+语法 `#(..)` 是Lisp打印器和读取器使用的向量的字面表达形式，该语法可使你用 `PRINT` 打印并用 `READ` 读取，以此来保存并恢复向量。
+
+`MAKR-ARRAY` 比 `VECTOR` 更加通用，它可以用来创建任何唯独的数组以及定长和变长向量。
+
+`MAKE-ARRAY` 的一个必要参数是一个含有数组维数的列表。
+
+`MAKE-ARRAY` 会使用一个简单的数字来代替只含有一项的列表。如果没有其他参数， `MAKE-ARRAY` 就将创建一个带有未初始化元素的向量，他们必须在被访问之前设置其值。
+
+可以传递一个 `:init-element` 参数为所有创建元素都设置到一个特定值上。
+
+```common-lisp
+(make-array 5 :initial-element nil)
+;#(NIL NIL NIL NIL NIL)
+```
+
+`MAKE-ARRAY` 也可以用来创建变长向量，变长向量除了跟踪其用来保存元素的内存和可访问的槽位数量，变长向量还要跟踪实际存储在向量中的元素数量。这个数字存放在向量的填充指针里，这样称呼是因为它是当为向量添加一个元素时下一个被填充位置的索引。
+
+为了创建带有填充指针的向量，可以向 `MAKE-ARRAY` 传递一个 `:fill-pointer` 实参。
+
+```common-lisp
+(make-array 5 :fill-pointer 0)
+;#()
+```
+
+函数 `VECTOR-PUSH` 在填充指针的当前值上添加一个元素并将填充指针递增一次，并返回新元素被添加位置的索引。
+
+函数 `VECTOR-POP` 返回最近推入的项，并在该过程中递减填充指针。
+
+```common-lisp
+(defparameter *x* (make-array 5 :fill-pointer 0))
+
+(vector-push 'a *x*)
+
+(vector-push 'b *x*)
+
+(vector-push 'c *x*)
+
+(vector-pop *x*)
+
+(vector-pop *x*)
+```
+
+`MAKE-ARRAY` 关键字参数 `:adjustable` 可以创建一个可任意变长的向量。
+
+```common-lisp
+(make-array 5 :fill-pointer 0 :adjustable t)
+```
+
+可以使用 `VECTOR-PUSH-EXTEND` 向一个已满的向量(其填充指针等于存储的大小)中推入元素时，它能自动扩展该数组。
+
+```common-lisp
+(vector-push-extend 'a *x*)
+```
+
+## 向量的子类型<a id="sec-1-2"></a>
+
+`MAKE-ARRAY` 通过添加另一个关键字参数 `:element-type` 来创建变长字符串。该参数接受一个类型描述符
+
+-   传递符号 `CHARACTER` 可以用来创建字符串
+-   传递符号 `BIT` 用来创建位向量。
+
+```common-lisp
+(make-array 5 :fill-pointer 0 :adjustable t :element-type 'character)
+```
+
+## 作为序列的向量<a id="sec-1-3"></a>
+
+向量和列表是抽象类型序列的两种具体子类型。
+
+序列函数 `LENGTH` 其返回一个序列长度。
+
+`ELT` 函数允许通过一个整数索引来访问个别元素。
+
+```common-lisp
+(defparameter *x* (vector 1 2 3))
+
+(length *x*)
+(elt *x* 0)
+(elt *x* 1)
+(elt *x* 2)
+(elt *x* 3)
+```
+
+## 序列迭代函数<a id="sec-1-4"></a>
+
+基本序列函数
+
+| 名称       | 所需参数 | 返回          |
+|---------- |------- |------------- |
+| COUNT      | 项和序列 | 序列中出现某项的次数 |
+| FIND       | 项和序列 | 项或NIL       |
+| POSITION   | 项和序列 | 序列中的索引NIL |
+| REMOVE     | 项和序列 | 项的实例被移除后的序列 |
+| SUBSTITUTE | 新项、项和序列 | 项的实例被新项替换后的序列 |
+
+使用序列函数的例子
+
+```common-lisp
+(count 1 #(1 2 1 2 3 1 2 3 4))
+(remove 1 #(1 2 1 2 3 1 2 3 4))
+(remove 1 '(1 2 1 2 3 1 2 3 4))
+(remove #\a "foobarbaz")
+(substitute 10 1 #(1 2 1 2 3 1 2 3 4))
+(substitute 10 1 (1 2 1 2 3 1 2 3 4))
+(find 1 #(1 2 1 2 3 1 2 3 4))
+(find 10 #(1 2 1 2 3 1 2 3 4))
+(position 1 #(1 2 1 2 3 1 2 3 4))
+
+```
+
+`REMOVE` 和 `SUBSTITUTE` 总是返回与序列实参相同类型的序列。
+
+可以使用 `:test` 关键字来传递一个接受两个参数并返回一个布尔值的函数。它将使用该函数代替默认的对象等价性测试 `EQL` 来比较序列中的每个元素。
+
+`:key` 关键字可以传递单参数函数，其被调用在序列的每个元素上以抽取一个关键值，该值随后会和替代元素自身的项进行比对。
+
+```common-lisp
+(count "foo" #("foo" "bar" "baz") :test #'string=)
+(find 'c #((a 10) (b 20) (c 30) (d 40)) :key #'first)
+```
+
+`:start` 和 `:end` 关键字参数提供边界指示，为 `:end` 传递NIL或是省略它与制定该序列长度具有相同的效果。
+
+使用非NIL的 `:from-end` 关键字参数，那些序列的元素将以相反的顺序被检查。 `:from-end` 单独使用只能影响 `FIND` 和 `POSITION` 的结果。
+
+```common-lisp
+(find 'a #((a 10) (b 20) (a 30) (b 40)) :key #'first)
+(find 'a #((a 10) (b 20) (a 30) (b 40)) :key #'first :from-end t)
+```
+
+`:count` 关键字参数用于制定有多少个元素被移除或替换， `:count` 和 `:from-end` 参数一起使用时可能影响 `REMOVE` 和 `SUBSTITUTE` 的行为。
+
+```common-lisp
+(remove #\a "foobarbaz" :count 1) ; "foobrbaz"
+
+(remove #\a "foobarbaz" :count 1 :from-end t) ; "foobarbz"
+```
+
+`:from-end` 无法改变 `COUNT` 函数的结果，但确实可以影响传递给任何 `:test` 和 `:key` 函数的元素顺序，这些函数可能带有副作用。
+
+```common-lisp
+(defparameter *v* #((a 10) (b 20) (a 30) (b 40)))
+
+(defun verbose-first (x)
+  (format t "Looking at ~s~%" x)
+  (first x))
+
+(count 'a *v* :key #'verbose-first)
+
+(count 'a *v* :key #'verbose-first :from-end t)
+```
+
+标准序列函数关键字参数
+
+| 参数      | 含义                                          | 默认值 |
+|--------- |--------------------------------------------- |--- |
+| :test     | 两参数函数用来比较元素(或由:key函数解出的值)和项 | EQL |
+| :key      | 单参数函数用来从实际的序列元素中解出用于比较的关键字值，NIL表示原样采用序列元素 | NIL |
+| :start    | 子序列的起始索引(含)                          | 0   |
+| :end      | 子序列的终止索引(不含)。NIL表示到序列的结尾   | NIL |
+| :from-end | 如果为真(t)，序列将以相反的顺序遍历，从尾到头 | NIL |
+| :count    | 数字代表要移除或替换元素个数，NIL代表全部。(仅用于REMOVE和SUBSTITUTE) | NIL |
+
+## 高阶函数变体<a id="sec-1-5"></a>
+
+一组变体被命名为与基本函数相同名字并带有一个追加的 `-IF` ，这些函数用于计算、查找、移除以及替换序列中那些函数参数返回真的元素。
+
+另一类变体以 `-IF-NOT` 后缀命名并计算、查找、移除以及替换函数参数不返回真的元素。
+
+```common-lisp
+(count-if #'evenp #(1 2 3 4 5))
+(count-if-not #'evenp #(1 2 3 4 5))
+(position-if #'digit-char-p "abcd0001")
+(remove-if-not #'(lambda (x) (char= (elt x 0) #\f))
+               #("foo" "bar" "baz" "foom"))
+```
+
+除了 `:test` ， 变体函数都接受和他们原始版本相同的关键字参数。通过 `:key` 参数，由 `:key` 函数所抽取出的值将代替实际元素传递给该函数。
+
+```common-lisp
+(count-if #'evenp #((1 a) (2 b) (3 c) (4 d) (5 e)) :key #'first)
+```
+
+`REMOVE` 函数接受第四种变体 `REMOVE-DUPLICATES` ，它接受序列作为仅需的必要参数，并将其中每个重复的元素移除到只剩下一个实例。
+
+```common-lisp
+(remove-duplicates #(1 2 1 2 3 1 2 3 4))
+#(1 2 3 4)
+```
+
+## 整个序列上的操作<a id="sec-1-6"></a>
+
+`COPY-SEQ` 和 `REVERSE` 都接受单一的序列参数并返回一个相同类型的新序列。
+
+`COPY-SEQ` 返回的序列包含与其参数相同的元素。
+
+`REVERSE` 返回的序列则含有顺序相反的相同元素。
+
+`COPY-SEQ` 和 `REVERSE` 都不会复制元素本身，只有返回的序列是一个新对象。
+
+函数 `CONCATENATE` 创建一个将任意数量序列连接在一起的新序列，必须显式指定产生何种类型的序列，第一个参数是类型描述符。
+
+```common-lisp
+(concatenate 'vector #(1 2 3) '(4 5 6))
+(concatenate 'list #(1 2 3) '(4 5 6))
+(concatenate 'string "abc" '(#\d #\e #\f))
+```
+
+## 排序与合并<a id="sec-1-7"></a>
+
+函数 `SORT` 和 `STABLE-SORT` 提供了两种序列排序方式，他们都接受一个序列和一个由两个实参组成的谓词，返回该序列排序后的版本。
+
+```common-lisp
+(sort (vector "foo" "bar" "baz") #'string<)
+#("bar" "baz" "foo")
+```
+
+`STABLE-SORT` 可以保证不会重排任何被该谓词视为等价的元素，而 `SORT` 只保证结果是已排序的并可能重排等价元素。
+
+这两个函数都是破坏性函数，会修改它们的参数(有副作用)。
+
+函数 `MERGE` 接受两个序列和一个谓词，并返回按照该谓词合并这两个序列所产生的序列。
+
+```common-lisp
+(merge 'vector #(1 3 5) #(2 4 6) #'<)
+#(1 2 3 4 5 6)
+(merge 'list #(1 3 5) #(2 4 6) #'<)
+(1 2 3 4 5 6)
+```
+
+## 子序列操作<a id="sec-1-8"></a>
+
+`SUBSEQ` 解出序列中从一个特定索引开始并延续到一个终止索引或结尾处的子序列。
+
+```common-lisp
+(subseq "foobarbaz" 3)
+"barbaz"
+(subseq "foobarbaz" 3 6)
+"bar"
+```
+
+`SUBSEQ` 支持 `SETF` ，但不会扩大或缩小一个序列。如果新的值和将被替换的子序列具有不同的长度，那么两者中较短的那一个将决定有多少个字符被实际改变。
+
+```common-lisp
+(defparameter *x* (copy-seq "foobarbaz"))
+(setf (subseq *x* 3 6) "xxx")
+;;*x*->"fooxxxbaz"
+(setf (subseq *x* 3 6) "abcd")
+;;*x*->"fooabcbaz"
+(setf (subseq *x* 3 6) "xx")
+;;*x*->"fooxxcbaz"
+```
+
+`SEARCH` 函数可以在一个序列中查找一个子序列。
+
+```common-lisp
+(search "bar" "foobarbaz")
+```
+
+`MISMATCH` 函数接受两个序列并返回第一对不相匹配的元素的索引。
+
+```common-lisp
+(mismatch "foobarbaz" "foom")
+```
+
+## 序列谓词<a id="sec-1-9"></a>
+
+`EVENP` 、 `SOME` 、 `NOTANY` 和 `NOTEVERY` 在序列上迭代并测试一个布尔谓词。这些函数第一个参数是谓词，其余参数都是序列。
+
+-   这个谓词应当接受与所传递序列相同数量的参数。
+-   序列的元素传递给该谓词，每个序列中各取出一个元素，直到某个序列用完所有的元素或满足了整体终止测试条件。
+
+`EVERY` 在谓词失败时返回假，如果所有谓词被满足，返回真。
+
+`SOME` 返回由谓词所返回的第一个非 `NIL` 值，或者在谓词永远得不到满足时返回假。
+
+`NOTANY` 将在谓词满足时返回假，或者在从未满足时返回真。
+
+`NOTEVERY` 在谓词失败时返回真，或者在谓词总是满足时返回假。
+
+序列谓词的使用
+
+```common-lisp
+(every #'evenp #(1 2 3 4 5))
+;;NIL
+(some #'evenp #(1 2 3 4 5))
+;;T
+(notany #'evenp #(1 2 3 4 5))
+;;NIL
+(notevery #'evenp #(1 2 3 4 5))
+;;T
+
+(every #'> #(1 2 3 4) #(5 4 3 2))
+;;NIL
+(some #'> #(1 2 3 4) #(5 4 3 2))
+;;T
+(notany #'> #(1 2 3 4) #(5 4 3 2))
+;;NIL
+(notevery #'> #(1 2 3 4) #(5 4 3 2))
+;;T
+```
+
+## 序列映射函数<a id="sec-1-10"></a>
+
+`MAP` 接受一个n-参数函数和n个序列，返回一个新序列，它由那些将函数应用在序列的相继元素上所得到的结果组成。 `MAP` 需要被告知其所创建序列的类型。
+
+```common-lisp
+(map 'vector #'* #(1 2 3 4 5) #(10 9 8 7 6))
+;;#(10 18 24 28 30)
+```
+
+`MAP-INTO` 与 `MAP` 相似，但它并不产生给定类型的新序列，而是将结果放置在一个作为第一个参数传递的序列中。这个序列可以是为函数提供值的序列中的一个。
+
+-   如果序列长度不同，那么 `MAP-INTO` 将只影响与最短序列元素数量相当的那些元素，其中也包括那个将被映射到的序列。
+-   `MAP-INTO` 调用后，受影响元素的数量将不限于填充指针而是该向量的实际大小，填充指针将被设置成映射元素的数量，但不会扩展一个可调整大小的向量。
+
+将几个向量a、b和c相加到一个向量里面
+
+```common-lisp
+(map-into a #'+ a b c)
+```
+
+`REDUCE` 函数可以映射在单个序列上，先将一个两参数函数应用到序列的最初两个元素上，再将函数返回值和序列后续元素继续用于该元素。
+
+计算1到10的整数求和。
+
+```common-lisp
+(reduce #'+ #(1 2 3 4 5 6 7 8 9 10))
+;;55
+```
+
+## 哈希表<a id="sec-1-11"></a>
+
+哈希表允许你使用任意对象作为索引或键(key)。当哈希表添加值时，可以把它保存在一个特定的键上。
+
+不带参数的 `MAKE-HASH-TABLE` 将创建一个哈希表，其认定两个键等价，当且仅当它们在 `EQL` 的意义上是相同的对象。
+
+两个带有相同内容的字符串不一定是 `EQL` 等价的。
+
+`MAKE-HASH-TABLE` 的 `:test` 参数指定符号是 `EQ` 和 `EQUAL` ，判断类型是否相等。
+
+```common-lisp
+(eql 3 "3")
+```
+
+`MAKE-HASH-TABLE` 的 `:test` 不能用来指定一个任意函数，值只能是 `EQ` 、 `EQL` 、 `EQUAL` 和 `EQUALP` 。
+
+`GETHASH` 函数提供了对哈希表元素的访问。它接受两个参数，即键和哈希表，并返回保存在哈希表中相应键下的值或是NIL。
+
+```common-lisp
+(defparameter *h* (make-hash-table))
+
+(gethash 'foo *h*)
+
+(setf (gethash 'foo *h*) 'quux)
+
+(gethash 'foo *h*)
+```
+
+`GETHASH` 实际上返回两个值
+
+-   主值是保存在给定键下的值或NIL
+-   从值是一个布尔值，用来指示该键在哈希表中是否存在。
+
+```common-lisp
+(defun show-value (key hash-table)
+  (multiple-value-bind (value present) (gethash key hash-table)
+    (if present
+        (format nil "Value ~a actually present." value)
+        (format nil "Value ~a because key not found." value))))
+(setf (gethash 'h *h*) nil)
+(show-value 'foo *h*)
+(show-value 'bar *h*)
+(show-value 'bar *h*)
+```
+
+由于将一个键下面的值设置成NIL会造成把键留在表中，需要另一个函数完全移除一个哈希对。
+
+`REMHASH` 接受和 `GETHASH` 相同的参数并移除指定的项。也可以使用 `CLRHASH` 来完全清除哈希表中的所有键值对。
+
+## 哈希表迭代<a id="sec-1-12"></a>
+
+`MAPHASH` 接受一个两参数函数和一个哈希表，并在哈希表的每一个键值对都对上调用一次该函数。
+
+打印哈希表中所有的键值对。
+
+```common-lisp
+(maphash #'(lambda (k v) (format t "~a => ~a~%" k v)) *h*)
+
+(loop for k being the hash-key in *h* using (hash-value v)
+      do (format t "~a => ~a~%" k v))
+```
