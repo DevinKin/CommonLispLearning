@@ -1,0 +1,192 @@
+* 第13章-点对列表的其他用法
+** 树
+  ~COPY-LIST~ 只复制构成列表结构的点对单元。
+
+  ~COPY-TREE~ 会复制列表内的每个点对单元都生成一个新的点对单元，并将它们以相同的结构连接在一起。
+
+  ~SUBST~ 接受一个新项、一个就项和一棵树，以及 ~:key~ 和 ~:test~ 关键字参数，然后返回一颗与原先的树具有相同形状的新树，旧项替换为新项。
+  #+begin_src common-lisp
+    (subst 10 1 '(1 2 (3 2 1) ((1 1) (2 2))))
+    ;;(10 2 (3 2 10) ((10 10) (2 2)))
+  #+end_src
+
+** 集合
+   列表可以看作是集合，但是集合变得更大时，操作将越来越低效。
+
+   可以使用哈系表或位向量代替列表构建集合。
+
+   函数 ~ADJOIN~ 构造集合， ~ADJOIN~ 接受一个项和一个代表集合的列表并返回另一个代表集合的列表，其中包含该项和原先集合中的所有项。
+
+   ~ADJOIN~ 接受 ~:key~ 和 ~:test~ 关键字参数，用于检测该项是否存在于原先的列表中。
+
+   ~ADJOIN~ 不会影响原先的列表。 ~PUSHNEW~ 修改宏可以将 ~ADJOIN~ 返回的值赋值到该列表所来自的位置上。
+   #+begin_src common-lisp
+     (defparameter *set* ())
+
+     (adjoin 1 *set*)
+
+     (setf *set* (adjoin 1 *set*))
+
+     (pushnew 2 *set*)
+
+     (pushnew 2 *set*)
+   #+end_src
+
+   ~MEMBER~ 、 ~MEMBER-IF~ 以及 ~MEMBER-IF-NOT~ 用来测试一个给定项是否在一个集合中。当指定项存在时，它们并不返回该项，而是返回含有该项的那个点对单元，即以指定项开始的子列表。当指定项不在列表中时，返回 ~NIL~ 。
+
+   ~INTERSECTION(交集)~ 、 ~UNION(并集)~ 、 ~SET-DIFFERENCE(差集)~ 以及 ~SET-EXCLUSIVE-OR~ 这些函数接受两个列表以及 ~:key~ 和 ~:test~ 关键字参数，并返回一个新列表，其代表了两个列表上进行适当的集合论操作所得的结果。
+
+   ~SET-EXCLUSIVE-OR~ 返回一个列表，其含有仅来自两个参数列表中的一个而不是两者的那些元素。
+
+   集合操作函数都有对应的回收性函数，前缀带N。
+
+   函数 ~SUBSETP~ 接受两个列表以及通常的 ~:key~ 和 ~:test~ 关键字参数，并在第一个列表是第二个的子集时返回真。
+   #+begin_src common-lisp
+     (subsetp '(3 2 1) '(1 2 3 4))
+     (subsetp '(4 3 2 1) '(1 2 3))
+   #+end_src
+
+
+** 查询表：alist和plist
+   可以用点对单元来构建表将键映射到值上。
+
+   关联表 ~alist~ 和属性表 ~plist~ 是常用的基于点对的查询表。
+
+   ~alist~ 是一种数据结构，它能将一些键映射到值上，同时也支持反响查询，且当给定一个值时，它还能找出对应的键。
+
+   ~alist~ 支持添加键/值映射来掩盖已有的映射，并且当这个映射以后被移除时原先的映射还可以再次暴露出来。
+
+   ~alist~ 本质上是一个列表，其中每一个元素本身都是一个点对单元。每个元素都可以被想想成是一个键值对，其中键保存在点对单元的 ~CAR~ 中而值保存在 ~CDR~ 中。
+
+   除非 ~CDR~ 中的值是一个列表，否则代表键值对的点对单元在表示成S-表达式时将是一个点对(dotted pair)
+   #+begin_src common-lisp
+     ((A . 1) (B . 2) (C . 3))
+   #+end_src
+
+   ~ASSOC~ 是 ~alist~ 的主查询函数，接受一个键和一个 ~alist~ 并返回第一个 ~CAR~ 匹配该键的点对单元，没有时返回 ~NIL~
+   #+begin_src common-lisp
+     (assoc 'a '((a . 10) (a . 1) (b . 2) (c . 3)))
+   #+end_src
+
+   ~ACONS~ 可以向一个 ~alist~ 前面添加键值对。
+   #+begin_src common-lisp
+     (acons 'new-key 'new-value alist)
+     ;;等价于 (cons (cons 'new-key 'new-value) alist)
+   #+end_src
+
+   ~ACONS~ 是一个函数，不能修改用来保存所传递的 ~alist~ 的位置。修改 ~alist~ 可以这样做
+   #+begin_src common-lisp
+     (settf alist (acons 'new-key 'new-value alist))
+     (push (cons 'new-key 'new-value) alist)
+   #+end_src
+
+   ~ASSOC-IF~ 和 ~ASSOC-IF-NOT~ 函数返回其 ~CAR~ 部分满足或不满足传递到指定项上的测试函数的地一个键值对。
+
+   ~RASSOC~ 、 ~RASSOC-IF~ 、 ~RASSOC-IF-NOT~ 使用每个元素的 ~CDR~ 中的值作为键，从而进行反向查询。
+
+   函数 ~COPY-ALIST~ 只复制那些构成列表结构的点对单元，外加的那些单元的 ~CAR~ 部分直接引用的点对单元。原先的 ~alist~ 和它的副本将同时含有相同的对象作为键和值．
+
+   ~PAIRLIS~ 可以接受键列表和值列表构造出一个 ~alist~ ，返回的 ~alist~ 可能含有与原先列表相同或相反顺序的键值对．
+   #+begin_src common-lisp
+     (pairlis '(a b c) '(1 2 3))
+     ;;((C . 3) (B . 2) (A . 1))
+   #+end_src
+
+   另一类查询表是属性表或 ~plist~ ，结构上， ~plist~ 只是一个正常的列表，其中带有交替出现的键和值作为列表中的值．
+   #+begin_src common-lisp
+     (A 1 B 2 C 3)
+   #+end_src
+
+   ~plist~ 仅支持一种基本查询操作，函数 ~GETF~ 接受一个 ~plist~ 和一个键，返回所关联的值或是在键没有被找到时返回 ~NIL~ ． ~GETF~ 第三个参数是可选参数，键没有找到时替代 ~NIL~ 返回值．
+
+    ~ASSOC~ 使用 ~EQL~ 作为默认测试并允许通过 ~:test~ 参数提供一个不同的测试函数.
+    
+    ~GETF~ 总是使用 ~EQ~ 来测试所提供的键是否匹配 ~plist~ 中的键.所以 ~plist~ 中的键不建议使用数字或字符,使用符号(symbol), 符号本质是一个对象.
+    - ~EQ~ 对于类型的行为在本质上是未定义的.
+      
+    可以使用 ~SETF~ 和 ~GETF~ 一起使用来设置与给定键关联的值.
+    #+begin_src common-lisp
+      (defparameter *plist* ())
+      (setf (getf *plist* :a) 1)
+      (setf (getf *plist* :a) 2)
+    #+end_src
+
+    ~REMF~ 宏可以移除 ~plist~ 中一个键/值对,他将作为其地一个参数给定的位置设置成含有除了指定的那一个以外的所有键值对的 ~plist~ .当给定键值对被实际找到时,返回 ~T~.
+    #+begin_src common-lisp
+      (remf *plist* :a)
+    #+end_src
+
+    ~GET-PROPERTIES~ 函数可以高效地从单一 ~plist~ 中抽取多个值, 它接受一个 ~plist~ 和一个需要被搜索的键的列表,并返回多个值. 返回值如下
+    - 第一个被找到的键
+    - 第一个被找到的键对应的值
+    - 一个以被找到键开始的列表的头部
+      
+    有效的处理用于指定键列表的 ~plist~ 中所有键/值对.
+    #+begin_src common-lisp
+      (defun process-properties (plist keys)
+        (loop while plist do
+          (multiple-value-bind (key value tail) (get-properties plist keys)
+            (when key (process-property key value))
+            (setf plist (cddr tail)))))
+    #+end_src
+
+    每一个符号对象都有一个相关联的 ~plist~ , 以便保存相关该符号的信息. 符号对象的 ~plist~ 可以通过函数 ~SYMBOL-PLIST~ 获取到.
+    #+begin_src common-lisp
+      (get 'symbol 'key)
+      ;; 等价于
+      (getf (symbol-plist 'symbol) 'key)
+    #+end_src
+    
+    使用 ~setf~ 将任意信息附加到符号对象上.
+    #+begin_src common-lisp
+      (setf (get 'som-symbol 'my-key) "information")
+    #+end_src
+
+    ~REMPROP~ 函数可以从一个符号对象的 ~plist~ 中移除 属性.
+    #+begin_src common-lisp
+      (remprop 'symbol 'key)
+      ;; 等价于
+      (remf (symbol-plist 'symbol key))
+    #+end_src
+
+
+** DESTRUCTURING-BIND
+   ~DESTRUCTURING-BIND~ 宏提供一种解构任意列表的方式, 基本形式如下
+   #+begin_src common-lisp
+     (destructuring-bind (parameter*) list
+       body-form*)
+   #+end_src
+
+   该参数列表可以包含宏参数列表中支持的任何参数类型,比如 ~&optional~ , ~&rest~ , ~&key~ 参数.
+
+   如同在宏参数列表中一样, 任何参数都可以被替换成一个嵌套的解构参数列表, 从而将一个原本绑定在单个参数的列表拆开.
+
+   其中 ~list~ 形式被求值一次并且当返回一个列表, 其随后被解构并且适当的值会被绑定到形参列表的对应变量中. 然后 ~body-form~ 将在这些绑定的作用下被求值.
+   #+begin_src common-lisp
+     (destructuring-bind (x y z) (list 1 2 3)
+       (list :x x :y y :z z))
+
+     (destructuring-bind (x y z) (list 1 (list 2 20) 3)
+       (list :x x :y y :z z))
+
+     (destructuring-bind (x (y1 y2) z) (list 1 (list 2 20) 3)
+       (list :x x :y1 y1 :y2 y2 :Z z))
+
+     (destructuring-bind (x (y1 &optional y2) z) (list 1 (list 2 20) 3)
+       (list :x x :y1 y1 :y2 y2 :Z z))
+
+     (destructuring-bind (x (y1 &optional y2) z) (list 1 (list 2) 3)
+       (list :x x :y1 y1 :y2 y2 :Z z))
+
+     (destructuring-bind (&key x y z) (list :x 1 :y 2 :z 3)
+       (list :x x :y y :Z z))
+
+     (destructuring-bind (&key x y z) (list :z 1 :y 2 :x 3)
+       (list :x x :y y :z z))
+   #+end_src
+
+   ~&whole~ 参数指定了, 它必须是参数列表中的第一个参数, 并且它会绑定到整个列表形式上. 在一个 ~&whole~ 参数之后, 其他参数可以像通常那样出现并且像没有 ~&whole~ 参数存在那样抽取出列表中的指定部分.
+   #+begin_src common-lisp
+     (destructuring-bind (&whole whole &key x y z) (list :z 1 :y 2 :x 3)
+       (list :x x :y y :z z :whole whole))
+   #+end_src
